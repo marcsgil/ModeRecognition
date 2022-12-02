@@ -24,7 +24,7 @@ function get_metrics(loader,network,loss)
     l = 0f0
     f = 0f0
     ntot = 0
-    for (x, y) in loader
+    @showprogress for (x, y) in loader
         x, y = x |> gpu, y |> gpu
         l += loss(network(x), y) * size(x)[end]     
         f += fidelity(network(x), y) * size(x)[end]   
@@ -42,7 +42,7 @@ function save_metrics(file_path,loss,fidelity)
 end
 
 function train_network!(network, train_data,test_data;saving_path,
-    loss = Flux.mse, optimizer= Adam(), batchsize=256,epochs=5,report=default_report)
+    loss = Flux.mse, optimizer= Adam(), batchsize=256,epochs=5)
 
     train_loader = Flux.DataLoader(train_data, batchsize=batchsize, shuffle=true)
     test_loader = Flux.DataLoader(test_data, batchsize=batchsize)

@@ -1,21 +1,21 @@
 using CairoMakie,CSV
 ##
 function get_plot(path)
-    train = CSV.File(open(path*"/train.csv"))["loss"]
-    test = CSV.File(open(path*"/test.csv"))["loss"]
+    train = CSV.File(open(path*"/train.csv"))["fidelity"]
+    test = CSV.File(open(path*"/test.csv"))["fidelity"]
 
     fig = Figure()
-    ax = Axis(fig[1,1],xlabel = "Epoch", ylabel = "MSE",
-    title = "IntenseBeam")
-    ylims!(ax,0,.0006)
+    ax = CairoMakie.Axis(fig[1,1],xlabel = "Epoch", ylabel = "Fidelity",
+    title = "32 Photons")
+    #ylims!(ax,0.94,1)
     train_line = lines!(ax,eachindex(train),train,color=:blue)
     test_line = lines!(ax,eachindex(test),test,color=:red)
-    axislegend(ax,[train_line,test_line],["Train Data", "Test Data"],position=:rt)
+    axislegend(ax,[train_line,test_line],["Train Data", "Test Data"],position=:rb)
 
     fig
 end
 
-get_plot("IntenseBeam/Results/Order1")
+get_plot("WeakBeam/Results/Order1/32Photons/Adam")
 ##
 
 exps=5:10

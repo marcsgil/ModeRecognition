@@ -1,5 +1,5 @@
-using CSV, DataFrames
+using Metalhead
 
-df = DataFrame(A=1,B=1)
+ConvNeXt(:tiny, inchannels = 2,  nclasses = 2)
 
-CSV.write("data.csv", Tables.table([1,1]),append=true)
+Inceptionv4( inchannels = 2,  nclasses = 2)

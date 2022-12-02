@@ -1,4 +1,4 @@
-using JLD2, Flux
+using JLD2, Flux, Metalhead
 
 include("../training_pipeline.jl")
 include("../vizualization.jl")
@@ -22,19 +22,21 @@ function LeNet5(x,y)
           )
 end
 ##
-xtrain,xtest = Flux.splitobs(load("C:/MLDatasets/StructuredLight/IntenseBeam/Order1/x_order_1.jld2")["x"], at=0.85);
-ytrain,ytest = Flux.splitobs(load("C:/MLDatasets/StructuredLight/IntenseBeam/Order1/y_order_1.jld2")["y"], at=0.85);
+xtrain,xtest = Flux.splitobs(load("C:/MLDatasets/StructuredLight/WeakBeam/Order1/x_32_photons.jld2")["x"], at=0.85);
+ytrain,ytest = Flux.splitobs(load("C:/MLDatasets/StructuredLight/WeakBeam/Order1/y_32_photons.jld2")["y"], at=0.85);
 ##
 network = LeNet5(xtrain,ytrain) |> gpu;
-train_network!(network, (xtrain,ytrain),(xtest,ytest),saving_path="IntenseBeam/Results/Order1",epochs=200)
+#network = ConvNeXt(:tiny, inchannels = 2,  nclasses = 2) |> gpu;
+train_network!(network, (xtrain,ytrain),(xtest,ytest),saving_path="WeakBeam/Results/Order1/32Photons",epochs=50,optimizer=AdamW(0.001, (0.9, 0.995), 0))
 ##
-best_model = load("IntenseBeam/Results/Order1/model.jld2")["model"] |>gpu;
-N_photons = 1024
+best_model = load("WeakBeam/Results/Order1/32Photons/best_model.jld2")["model"] |>gpu;
+N_photons = 32
 data = load("C:/MLDatasets/StructuredLight/WeakBeam/Order1/x_$(N_photons)_photons.jld2")["x"],
 load("C:/MLDatasets/StructuredLight/WeakBeam/Order1/y_$(N_photons)_photons.jld2")["y"]
 get_metrics(Flux.DataLoader(data, batchsize=256),best_model,Flux.mse)
-view(data[2],:,200:204)
-best_model(data[1][:,:,:,200:204]|>gpu)
+interval = 137:142
+view(data[2],:,interval)
+best_model(data[1][:,:,:,interval]|>gpu)
 
 using LinearAlgebra
 function slow_fidelity(ŷ,y)
@@ -55,4 +57,5 @@ function slow_fidelity(ŷ,y)
     [abs2(dot(view(cs,:,n),view(ĉs,:,n))) for n in axes(cs,2)]
 end
 
-slow_fidelity(best_model(data[1][:,:,:,200:204]|>gpu)|>cpu,view(data[2],:,200:204))
+
+slow_fidelity(best_model(data[1][:,:,:,interval]|>gpu)|>cpu,view(data[2],:,interval))
