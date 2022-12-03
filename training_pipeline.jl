@@ -24,9 +24,9 @@ function get_metrics(loader,network,loss)
     l = 0f0
     f = 0f0
     ntot = 0
-    @showprogress for (x, y) in loader
+    for (x, y) in loader
         x, y = x |> gpu, y |> gpu
-        l += loss(network(x), y) * size(x)[end]     
+        l += loss(network(x|> gpu), y|> gpu) * size(x)[end]     
         f += fidelity(network(x), y) * size(x)[end]   
         ntot += size(x)[end]
     end
