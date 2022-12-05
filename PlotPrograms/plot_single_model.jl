@@ -1,6 +1,6 @@
 using CairoMakie,Flux,JLD2,ProgressMeter
 
-include("training_pipeline.jl")
+include("../training_pipeline.jl")
 
 best_model = load("IntenseBeam/Results/Order1/model.jld2")["model"] |>gpu;
 
