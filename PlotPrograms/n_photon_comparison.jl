@@ -1,61 +1,102 @@
-using CairoMakie,JLD2,Flux,LinearAlgebra,Statistics
+using CairoMakie,JLD2,Flux,LinearAlgebra,Statistics,ProgressMeter,ColorSchemes
 
 function fidelity(ŷ,y)
-    D = size(y,1)÷2 + 1
-    N = size(y,2)
+    D = size(y,1)÷2
+    r̂ = @view ŷ[2:D+1,:]
+    î = @view ŷ[D+2:end,:]
+    r = @view y[2:D+1,:]
+    i = @view y[D+2:end,:]
 
-    ĉs = Array{ComplexF32}(undef,D,N)  
-    cs = Array{ComplexF32}(undef,D,N)
+    ĉ1 = @view ŷ[1:1,:]
+    c1 = @view y[1:1,:]
 
-    for n in 1:N
-        for m in 1:D-1
-            cs[m+1,n] = y[m,n] + im*y[m+D-1,n]
-            ĉs[m+1,n] = ŷ[m,n] + im*ŷ[m+D-1,n]
-        end
-        cs[1,n] = √max(0,(1-sum(abs2,@view cs[2:end,n])))
-        ĉs[1,n] = √max(0,(1-sum(abs2,@view ĉs[2:end,n])))
+    R = sum((@. r̂*r+î*i), dims = 1) .+ ĉ1.*c1
+    I = sum((@. r*î-r̂*i), dims = 1)
+
+    N = sum(abs2,r,dims=1) + sum(abs2,i,dims=1) + c1.^2
+    N̂ = sum(abs2,r̂,dims=1) + sum(abs2,î,dims=1) + ĉ1.^2
+
+    @. (R^2+I^2)/( N*N̂ )/size(y,2)
+end
+##
+N_photons = [32,64,128,256,512,1024,2048,Inf]
+orders = [1,2,3,4]
+pars = Iterators.product(N_photons,orders) |> collect
+
+means_f = Array{Float32}(undef,length(N_photons),length(orders))
+stds_f = Array{Float32}(undef,length(N_photons),length(orders))
+##
+@showprogress for n in eachindex(pars)
+    N_photon,order = pars[n]
+    if !isinf(N_photon)
+        N_photon = Int(N_photon)
     end
-    [abs2(dot(view(cs,:,n),view(ĉs,:,n)))/(dot(view(cs,:,n),view(cs,:,n))*dot(view(ĉs,:,n),view(ĉs,:,n))) |> real for n in axes(cs,2)]
-end
+    order = Int(order)
 
-function my_error(ŷ,y)
-    sum(abs,y.-ŷ,dims=1)./size(y,1) |> vec
+    best_model = load("Theoretical/Order$(order)/$(N_photon)_photons/best_model.jld2")["model"];
+    xtrain,xtest = Flux.splitobs(load("C:/MLDatasets/StructuredLight/Theoretical/x_order$(order)_$(N_photon)_photons.jld2")["x"], at=0.85);
+    ytrain,ytest = Flux.splitobs(load("C:/MLDatasets/StructuredLight/Theoretical/y_order$(order)_$(N_photon)_photons.jld2")["cs"], at=0.85);
+
+    xtrain = nothing
+    ytrain = nothing
+
+    ŷ = best_model(xtest)
+    fs = fidelity(ŷ,ytest)
+
+    means_f[n] =  mean(fs)
+    stds_f[n] = std(fs)
 end
+jldsave("Theoretical/fidelities.jld2",means=means_f,stds=stds_f)
 ##
-
-Ns_photons = [2^n for n in 5:10]
-means_f = Vector{Float32}(undef,6)
-stds_f = Vector{Float32}(undef,6)
-means_e = Vector{Float32}(undef,6)
-stds_e = Vector{Float32}(undef,6)
-
-best_model = load("IntenseBeam/Results/Order1/model.jld2")["model"]
-
-for (n,N_photons) in enumerate(Ns_photons)
-
-    #best_model = load("WeakBeam/Results/Order1/$(N_photons)Photons/AdamW+MAE/best_model.jld2")["model"];
-    x = load("C:/MLDatasets/StructuredLight/WeakBeam/Order1/xtest_$(N_photons)_photons.jld2")["xtest"]
-    y = load("C:/MLDatasets/StructuredLight/WeakBeam/Order1/ytest_$(N_photons)_photons.jld2")["ytest"]
-
-    ŷ = best_model(x)
-    fs = fidelity(ŷ,y)
-    means_f[n] =  round(mean(fs),sigdigits=3)
-    stds_f[n] = round(std(fs),sigdigits=2)
-
-    errors = my_error(ŷ,y)
-    means_e[n] = round(mean(errors),sigdigits=2)
-    stds_e[n] = round(std(errors),sigdigits=2)
+#means_f = load("Theoretical/fidelities.jld2")["means"]
+#stds_f = load("Theoretical/fidelities.jld2")["stds"]
+stds_f = round.(stds_f,sigdigits=2)
+function first_sigdigit(x)
+    @assert x<1
+    for n in 1:100
+        if x*10^n ≥ 1
+            return n
+            break
+        end
+    end
 end
+
+for n in eachindex(means_f)
+    means_f[n] = round(means_f[n],digits=first_sigdigit(stds_f[n])+1)
+end
+
+means_f
 ##
-fig = Figure(resolution=(1600,800),fontsize=28)
-ax1 = Axis(fig[1,1],xlabel = L"\log_2 (\text{number of photons})", ylabel = "Mean Fidelity",yticks=.76:.02:1,xticks=5:10)
-ax2 = Axis(fig[1,2],xlabel = L"\log_2 (\text{number of photons})", ylabel = "MAE",yticks=0:.04:.30,xticks=5:10)
-#ylims!(ax,0.968,1)
+xlabels = [string(2^x) for x in 5:11]
+push!(xlabels,"Inf")
+
+
+fig = Figure(fontsize=28)
+ax = Axis(fig[1,1],xlabel = "Number of photons", ylabel = "Mean Fidelity",xticks=(5:12,xlabels),yticks=.94:.01:1.05)
+ylims!(ax,0.94,1.001)
 #xlims!(5,10)
-lines!(ax1,5:10,means_f,color=:red,linewidth=4)
-errorbars!(ax1,5:10,means_f, stds_f,ones(6)-means_f, color = :black, whiskerwidth = 10,linewidth=3)
-
-lines!(ax2,5:10,means_e,color=:red,linewidth=4)
-errorbars!(ax2,5:10,means_e, max.(means_e.-stds_e,means_e),stds_e, color = :black, whiskerwidth = 10,linewidth=3)
+for n in axes(means_f,2)
+    lines!(ax,5:12, means_f[:,n],linewidth=4,label="Dimension $(n+1)")
+    #errorbars!(ax,5:12, means_f[:,n],stds_f[:,n], whiskerwidth = 10,linewidth=3)
+end
+axislegend(position = :rb)
 
 fig
+##
+stds_f
+means_f
+##
+means_f
+fig,ax,hm = heatmap(2:5,5:12,means_f',axis=(;yticks=(5:12,xlabels),xticks=(2:5),xlabel="Dimension",ylabel="Number of Photons"),figure=(;fontsize=24,resolution=(1000,600)),colorrange=(.94,1.00),colormap=:balance)
+Colorbar(fig[1,2],hm,ticks=.94:.01:1,label="Fidelity")
+for i in 2:5
+    for j in 5:12
+        textcolor = means_f[j-4,i-1] > .96 &&  means_f[j-4,i-1] < .997 ? :black : :white
+        text!(ax, string(means_f[j-4,i-1])*"±"*string(stds_f[j-4,i-1]), position = (i, j),
+        color = textcolor, align = (:center, :center))
+    end
+end
+fig
+##
+
+ColorSchemes.balance[0.1]
