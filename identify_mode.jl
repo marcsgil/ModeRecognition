@@ -3,9 +3,6 @@ using JLD2, Flux
 include("training_pipeline.jl")
 include("vizualization.jl")
 
-using CUDA
-CUDA.allowscalar(false)
-
 function LeNet5(x,y)
     #Creates a LeNet5 network with the correct sizes to work with input x and output y
 
